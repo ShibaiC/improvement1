@@ -1,0 +1,83 @@
+-- Define the teams
+local Teams = game:GetService("Teams")
+local hidersTeam = Teams.Hiders
+local seekersTeam = Teams.Seekers
+
+-- Define the spawn locations
+local Workspace = game:GetService("Workspace")
+local hidersSpawn = Workspace.HidersSpawn
+local seekersSpawn = Workspace.SeekersSpawn
+
+-- Create a table to store the last touch time for each player
+local lastTouchTime = {}
+
+-- Create a table to store a flag for each player to prevent rapid touches
+local touchCooldownFlag = {}
+
+-- Function to switch a player's team and teleport them to the appropriate spawn
+local function switchTeams(player)
+	local currentTeam = player.Team
+	if currentTeam == hidersTeam then
+		player.Team = seekersTeam
+		player.Character:SetPrimaryPartCFrame(seekersSpawn.CFrame)
+	else
+		player.Team = hidersTeam
+		player.Character:SetPrimaryPartCFrame(hidersSpawn.CFrame)
+	end
+end
+
+-- Function to handle player touch events with a debounce and delay
+local function onPlayerTouched(seeker, part)
+	local Players = game:GetService("Players")
+	local hider = Players:GetPlayerFromCharacter(part.Parent)
+	if seeker.Team == seekersTeam and hider and hider.Team == hidersTeam then
+		local lastTouch = lastTouchTime[seeker]
+		if not lastTouch or tick() - lastTouch >= 2 then
+			if not touchCooldownFlag[seeker] then
+				touchCooldownFlag[seeker] = true
+				touchCooldownFlag[hider] = true
+
+				switchTeams(hider)
+				switchTeams(seeker)
+
+				-- Increase the seeker's score
+				local leaderstats = seeker:FindFirstChild("leaderstats")
+				if leaderstats then
+					local found = leaderstats:FindFirstChild("Found")
+					if found then
+						found.Value = found.Value + 1
+						print(seeker.Name .. " found " .. hider.Name)
+					end
+				end
+
+				lastTouchTime[seeker] = tick()  -- Update the last touch time
+
+				-- Introduce a delay before enabling touch events again
+				task.wait(2)
+				touchCooldownFlag[seeker] = false
+				touchCooldownFlag[hider] = false
+			end
+		end
+	end
+end
+
+-- Connect player touch events
+game.Players.PlayerAdded:Connect(function(player)
+	lastTouchTime[player] = 0  -- Initialize the last touch time for each player
+
+	player.CharacterAdded:Connect(function(character)
+		local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+		if humanoidRootPart then
+			local touchConnection = humanoidRootPart.Touched:Connect(function(otherPart)
+				onPlayerTouched(player, otherPart)
+			end)
+
+			-- Set initial spawn point based on the player's team
+			if player.Team == hidersTeam then
+				character:SetPrimaryPartCFrame(hidersSpawn.CFrame)
+			else
+				character:SetPrimaryPartCFrame(seekersSpawn.CFrame)
+			end
+		end
+	end)
+end)
